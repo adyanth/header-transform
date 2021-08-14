@@ -21,13 +21,14 @@ func assertHeader(t *testing.T, req *http.Request, key, expected string) {
 func TestHeaderRules(t *testing.T) {
 	tests := []struct {
 		name    string
-		rule    plug.Rule
+		rule    plug.InRule
 		headers map[string]string
 		want    map[string]string
+		remote  string
 	}{
 		{
 			name: "[Rename] no transformation",
-			rule: plug.Rule{
+			rule: plug.InRule{
 				Type:   "Rename",
 				Header: "not-existing",
 			},
@@ -40,7 +41,7 @@ func TestHeaderRules(t *testing.T) {
 		},
 		{
 			name: "[Rename] one transformation",
-			rule: plug.Rule{
+			rule: plug.InRule{
 				Type:   "Rename",
 				Header: "Test",
 				Value:  "X-Testing",
@@ -56,7 +57,7 @@ func TestHeaderRules(t *testing.T) {
 		},
 		{
 			name: "[Rename] Deletion",
-			rule: plug.Rule{
+			rule: plug.InRule{
 				Type:   "Rename",
 				Header: "Test",
 			},
@@ -71,7 +72,7 @@ func TestHeaderRules(t *testing.T) {
 		},
 		{
 			name: "[Set] Set one simple",
-			rule: plug.Rule{
+			rule: plug.InRule{
 				Type:   "Set",
 				Header: "X-Test",
 				Value:  "Tested",
@@ -86,7 +87,7 @@ func TestHeaderRules(t *testing.T) {
 		},
 		{
 			name: "[Set] Set already existing simple",
-			rule: plug.Rule{
+			rule: plug.InRule{
 				Type:   "Set",
 				Header: "X-Test",
 				Value:  "Tested",
@@ -102,7 +103,7 @@ func TestHeaderRules(t *testing.T) {
 		},
 		{
 			name: "[Del] Remove not existing header",
-			rule: plug.Rule{
+			rule: plug.InRule{
 				Type:   "Del",
 				Header: "X-Test",
 			},
@@ -115,7 +116,7 @@ func TestHeaderRules(t *testing.T) {
 		},
 		{
 			name: "[Del] Remove one header",
-			rule: plug.Rule{
+			rule: plug.InRule{
 				Type:   "Del",
 				Header: "X-Test",
 			},
@@ -129,7 +130,7 @@ func TestHeaderRules(t *testing.T) {
 		},
 		{
 			name: "[Set] Join headers simple value (same as set)",
-			rule: plug.Rule{
+			rule: plug.InRule{
 				Type:   "Set",
 				Sep:    ",",
 				Header: "X-Test",
@@ -149,7 +150,7 @@ func TestHeaderRules(t *testing.T) {
 		},
 		{
 			name: "[Set] Join two headers multiple value",
-			rule: plug.Rule{
+			rule: plug.InRule{
 				Type:   "Set",
 				Sep:    ",",
 				Header: "X-Test",
@@ -170,7 +171,7 @@ func TestHeaderRules(t *testing.T) {
 		},
 		{
 			name: "[Rename] no transformation with HeaderPrefix",
-			rule: plug.Rule{
+			rule: plug.InRule{
 				Type:         "Rename",
 				Header:       "not-existing",
 				Value:        "^unused",
@@ -185,7 +186,7 @@ func TestHeaderRules(t *testing.T) {
 		},
 		{
 			name: "[Rename] one transformation",
-			rule: plug.Rule{
+			rule: plug.InRule{
 				Type:         "Rename",
 				Header:       "Test",
 				Value:        "^X-Dest-Header",
@@ -204,7 +205,7 @@ func TestHeaderRules(t *testing.T) {
 		},
 		{
 			name: "[Set] new header from existing",
-			rule: plug.Rule{
+			rule: plug.InRule{
 				Type:         "Set",
 				Header:       "X-Test",
 				Value:        "^X-Source",
@@ -222,7 +223,7 @@ func TestHeaderRules(t *testing.T) {
 		},
 		{
 			name: "[Set] existing header from another existing",
-			rule: plug.Rule{
+			rule: plug.InRule{
 				Type:         "Set",
 				Header:       "X-Test",
 				Value:        "^X-Source",
@@ -241,7 +242,7 @@ func TestHeaderRules(t *testing.T) {
 		},
 		{
 			name: "[Set] Join two headers simple value",
-			rule: plug.Rule{
+			rule: plug.InRule{
 				Type:   "Set",
 				Sep:    ",",
 				Header: "X-Test",
@@ -263,7 +264,7 @@ func TestHeaderRules(t *testing.T) {
 		},
 		{
 			name: "[Set] Join two headers multiple value",
-			rule: plug.Rule{
+			rule: plug.InRule{
 				Type:   "Set",
 				Sep:    ",",
 				Header: "X-Test",
@@ -289,7 +290,7 @@ func TestHeaderRules(t *testing.T) {
 		},
 		{
 			name: "[Set] Join two headers multiple value with itself",
-			rule: plug.Rule{
+			rule: plug.InRule{
 				Type:   "Set",
 				Sep:    ",",
 				Header: "X-Test",
@@ -310,11 +311,51 @@ func TestHeaderRules(t *testing.T) {
 				"X-Test": "second,test,third",
 			},
 		},
+		{
+			name: "[TrustedCIDR] Check if headers are modified when IP is trusted",
+			rule: plug.InRule{
+				Type:   "Rename",
+				Header: "Test",
+				Value:  "X-Testing",
+				TrustedCIDR: []string{
+					"192.168.0.0/24",
+				},
+			},
+			headers: map[string]string{
+				"Foo":  "Bar",
+				"Test": "Success",
+			},
+			want: map[string]string{
+				"Foo":       "Bar",
+				"X-Testing": "Success",
+			},
+			remote: "192.168.0.10:2200",
+		},
+		{
+			name: "[TrustedCIDR] Check if headers are not modified when IP is not trusted",
+			rule: plug.InRule{
+				Type:   "Rename",
+				Header: "Test",
+				Value:  "X-Testing",
+				TrustedCIDR: []string{
+					"192.168.1.0/24",
+				},
+			},
+			headers: map[string]string{
+				"Foo":  "Bar",
+				"Test": "Success",
+			},
+			want: map[string]string{
+				"Foo":  "Bar",
+				"Test": "Success",
+			},
+			remote: "192.168.0.10:2200",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := plug.CreateConfig()
-			cfg.Rules = []plug.Rule{tt.rule}
+			cfg.Rules = []plug.InRule{tt.rule}
 
 			ctx := context.Background()
 			next := http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {})
@@ -327,6 +368,10 @@ func TestHeaderRules(t *testing.T) {
 			recorder := httptest.NewRecorder()
 
 			req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost", nil)
+			if tt.remote == "" {
+				tt.remote = "10.10.10.1:2000"
+			}
+			req.RemoteAddr = tt.remote
 			if err != nil {
 				t.Fatal(err)
 			}
