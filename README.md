@@ -46,6 +46,18 @@ To choose a Rule you have to fill the `Type` field with one of the following:
 - 'Del'     : to Delete a header
 
 Each Rule can be named with the `Name` field
+Each Rule can be set to run only if the previous hop IP address belongs to a trusted range of IPs. Set this using the optional `TrustedCIDR`.
+
+```yaml
+# Example
+- Rule:
+      Name: 'Test'
+      ...
+      TrustedCIDR:
+        - 10.0.0.0/8
+        - 172.16.0.0/12
+        - 192.168.0.0/16
+```
 
 ### Rename
 
