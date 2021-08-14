@@ -3,6 +3,7 @@ package header_transform
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	"regexp"
 	"strings"
@@ -10,6 +11,17 @@ import (
 
 // Rule struct so that we get traefik config
 type Rule struct {
+	Name         string       `yaml:"Name"`
+	Header       string       `yaml:"Header"`
+	Value        string       `yaml:"Value"`
+	Values       []string     `yaml:"Values"`
+	HeaderPrefix string       `yaml:"HeaderPrefix"`
+	Sep          string       `yaml:"Sep"`
+	Type         string       `yaml:"Type"`
+	TrustedCIDR  []*net.IPNet `yaml:"TrustedCIDR"`
+}
+
+type InRule struct {
 	Name         string   `yaml:"Name"`
 	Header       string   `yaml:"Header"`
 	Value        string   `yaml:"Value"`
@@ -17,17 +29,18 @@ type Rule struct {
 	HeaderPrefix string   `yaml:"HeaderPrefix"`
 	Sep          string   `yaml:"Sep"`
 	Type         string   `yaml:"Type"`
+	TrustedCIDR  []string `yaml:"TrustedCIDR"`
 }
 
 // Config holds configuration to be passed to the plugin
 type Config struct {
-	Rules []Rule
+	Rules []InRule
 }
 
 // CreateConfig populates the Config data object
 func CreateConfig() *Config {
 	return &Config{
-		Rules: []Rule{},
+		Rules: []InRule{},
 	}
 }
 
@@ -38,8 +51,33 @@ type HeadersTransformation struct {
 	name  string
 }
 
+// Convert InRule to Rule
+func (in *InRule) toRule() Rule {
+	var nets []*net.IPNet
+	for _, v := range in.TrustedCIDR {
+		_, ip, err := net.ParseCIDR(v)
+		if err != nil {
+			// If CIDR is not correct, ignore and continue
+			continue
+		}
+		nets = append(nets, ip)
+	}
+	rule := Rule{
+		in.Name,
+		in.Header,
+		in.Value,
+		in.Values,
+		in.HeaderPrefix,
+		in.Sep,
+		in.Type,
+		nets,
+	}
+	return rule
+}
+
 // New instantiates and returns the required components used to handle a HTTP request
 func New(ctx context.Context, next http.Handler, config *Config, name string) (http.Handler, error) {
+	var rules []Rule
 	for _, rule := range config.Rules {
 		if rule.Header == "" || rule.Type == "" {
 			return nil, fmt.Errorf("can't use '%s', header and type cannot be empty",
@@ -59,9 +97,10 @@ func New(ctx context.Context, next http.Handler, config *Config, name string) (h
 					rule.Name)
 			}
 		}
+		rules = append(rules, rule.toRule())
 	}
 	return &HeadersTransformation{
-		rules: config.Rules,
+		rules: rules,
 		next:  next,
 		name:  name,
 	}, nil
@@ -71,36 +110,39 @@ func New(ctx context.Context, next http.Handler, config *Config, name string) (h
 // return nothing if regexp failed.
 func (u *HeadersTransformation) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	for _, rule := range u.rules {
-		switch rule.Type {
-		case "Rename":
-			for headerName, headerValues := range req.Header {
-				matched, err := regexp.Match(rule.Header, []byte(headerName))
-				if err != nil {
-					http.Error(rw, err.Error(), http.StatusInternalServerError)
-					return
-				}
-				if matched {
-					req.Header.Del(headerName)
-					for _, val := range headerValues {
-						req.Header.Set(getValue(rule.Value, rule.HeaderPrefix, req), val)
+		// Check if the last hop IP is in the allowed IP list
+		if rule.trustIP(req.RemoteAddr) {
+			switch rule.Type {
+			case "Rename":
+				for headerName, headerValues := range req.Header {
+					matched, err := regexp.Match(rule.Header, []byte(headerName))
+					if err != nil {
+						http.Error(rw, err.Error(), http.StatusInternalServerError)
+						return
+					}
+					if matched {
+						req.Header.Del(headerName)
+						for _, val := range headerValues {
+							req.Header.Set(getValue(rule.Value, rule.HeaderPrefix, req), val)
+						}
 					}
 				}
-			}
-		case "Set":
-			// Set to value, and append values if present. Either of them can be empty
-			tmp_val := getValue(rule.Value, rule.HeaderPrefix, req)
-			if len(rule.Values) != 0 {
-				for _, value := range rule.Values {
-					if tmp_val != "" {
-						tmp_val += rule.Sep
+			case "Set":
+				// Set to value, and append values if present. Either of them can be empty
+				tmp_val := getValue(rule.Value, rule.HeaderPrefix, req)
+				if len(rule.Values) != 0 {
+					for _, value := range rule.Values {
+						if tmp_val != "" {
+							tmp_val += rule.Sep
+						}
+						tmp_val += getValue(value, rule.HeaderPrefix, req)
 					}
-					tmp_val += getValue(value, rule.HeaderPrefix, req)
 				}
+				req.Header.Set(rule.Header, tmp_val)
+			case "Del":
+				req.Header.Del(rule.Header)
+			default:
 			}
-			req.Header.Set(rule.Header, tmp_val)
-		case "Del":
-			req.Header.Del(rule.Header)
-		default:
 		}
 	}
 	u.next.ServeHTTP(rw, req)
@@ -118,4 +160,25 @@ func getValue(ruleValue, vauleIsHeaderPrefix string, req *http.Request) string {
 		}
 	}
 	return actualValue
+}
+
+func (r *Rule) trustIP(s string) bool {
+	temp, _, err := net.SplitHostPort(s)
+	if err != nil {
+		return true
+	}
+	ip := net.ParseIP(temp)
+
+	// If no trusted IPs are provided, all IPs are trusted
+	if len(r.TrustedCIDR) == 0 {
+		return true
+	}
+
+	// Check if the previous hop belongs to one of the trusted IP ranges
+	for _, network := range r.TrustedCIDR {
+		if network.Contains(ip) {
+			return true
+		}
+	}
+	return false
 }
