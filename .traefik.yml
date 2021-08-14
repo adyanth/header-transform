@@ -3,7 +3,7 @@ type: middleware
 
 import: github.com/adyanth/header-transform
 
-summary: 'Transform some headers with some other ones, see https://github.com/traefik/traefik/issues/6047'
+summary: 'Transform headers including referring to other headers with full Regex support, see https://github.com/traefik/traefik/issues/6047'
 
 testData:
   Rules:
