@@ -1,4 +1,4 @@
-package htransformation_test
+package header_transform_test
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	plug "github.com/tommoulard/htransformation"
+	plug "github.com/adyanth/header-transform"
 )
 
 func assertHeader(t *testing.T, req *http.Request, key, expected string) {

@@ -1,6 +1,6 @@
 # Header transformation plugin for Traefik
 
-[![Build Status](https://travis-ci.com/tomMoulard/htransformation.svg?branch=main)](https://travis-ci.com/tomMoulard/htransformation)
+[![Build Status](https://travis-ci.com/adyanth/header-transform.svg?branch=main)](https://travis-ci.com/adyanth/header-transform)
 
 This plugin allows to change, on the fly, the header's value of a request.
 
@@ -13,7 +13,7 @@ pilot:
 experimental:
   devPlugin:
     goPath: /home/tm/go
-    moduleName: github.com/tommoulard/htransformation
+    moduleName: github.com/adyanth/header-transform
 
 entryPoints:
   http:
@@ -27,7 +27,7 @@ api:
 
 providers:
   file:
-    filename: rules-htransformation.yaml
+    filename: rules-header-transform.yaml
 ```
 
 ## How to dev
@@ -216,8 +216,3 @@ The rules will be evaluated in the order of definition
 ```
 
 This will firstly set the header `X-Custom-2` to 'True', then delete it and finally set it again but with `False`
-
-# Authors
-| Tom Moulard | Clément David | Martin Huvelle | Alexandre Bossut-Lasry |
-|-------------|---------------|----------------|------------------------|
-|[![](img/gopher-tom_moulard.png)](https://tom.moulard.org)|[![](img/gopher-clement_david.png)](https://github.com/cledavid)|[![](img/gopher-martin_huvelle.png)](https://github.com/nitra-mfs)|[![](img/gopher-alexandre_bossut-lasry.png)](https://www.linkedin.com/in/alexandre-bossut-lasry/)|

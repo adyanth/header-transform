@@ -1,4 +1,4 @@
-displayName: Header transformation
+displayName: Header transformer
 type: middleware
 
 import: github.com/adyanth/header-transform

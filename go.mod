@@ -1,3 +1,3 @@
-module github.com/tommoulard/htransformation
+module github.com/adyanth/header-transform
 
 go 1.13
